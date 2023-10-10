@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 
-let setState = require("./app/bookKitMng");
+let {setState, deleteEntries} = require("./app/bookKitMng");
 const commandLineArgs = require("command-line-args");
 const commandLineUsage = require("command-line-usage");
 
 
 const parametersdefinitions =[
+  {
+    name: 'action',
+    alias: "a",
+    type: String,
+    typeLabel: "{underline help}",
+    description: "Action to execute (setState, delete)."
+  },
   {
     name: "book",
     alias: "b",
@@ -26,8 +33,7 @@ const parametersdefinitions =[
     alias: "s",
     typeLabel: "{underline active}",
     description: "State to set.",
-    type: String,
-    defaultOption: true
+    type: String
   },
   {
     name: "help",
@@ -67,5 +73,17 @@ if (!valid || options.help) {
   process.exit();
 }
 
-
-setState(options.book, options.rootPage, options.state);
+switch (options.action) {
+  case 'setState':
+    setState(options.book, options.rootPage, options.state);
+    break;
+  case 'delete':
+    deleteEntries(options.book, options.rootPage);
+    break;
+  case 'help':
+    console.log(usage);
+    break;
+  default:
+    console.error('Unknown operation. Use "help" for usage information.');
+    process.exit(1);
+}

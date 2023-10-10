@@ -3,24 +3,31 @@ const DefaultConfig = require("../config/default");
 Config.activeProfiles = "development";
 Config.registerImplicitSource(DefaultConfig);
 const {UriBuilder} = require("uu_appg01_core-uri");
-const OidcToken = require("./oidc-interactive-login");
 const {AuthenticationService, AppClient} = require("uu_appg01_server-client");
 const {LoggerFactory} = require("uu_appg01_core-logging");
 
 const logger = LoggerFactory.get("BookKitManagement");
 
 async function appClientPost(uri, dtoIn, options) {
-  let status;
+  let attempt = 1;
+  let lastError;
   do {
-    status = 200;
     try {
       return await AppClient.post(uri, dtoIn, options);
     } catch (e) {
+      lastError = e;
       logger.debug(`Error during command call: ${JSON.stringify(e, null, 2)}`);
-      status = e.status;
-      throw e;
+      const status = e.status;
+      if (status !== 502 && status !== 404) {
+        throw e;
+      } else {
+        logger.warn(`Error during command call: ${status} - ${e.message}`);
+        await new Promise(r => setTimeout(r, 2000));
+        attempt++;
+      }
     }
-  } while (status === 502 || status === 404);
+  } while (attempt <= 5);
+  throw lastError;
 }
 
 async function appClientGet(uri, dtoIn, options) {
@@ -65,9 +72,39 @@ async function updateFulltextIndex(bookUri, session) {
   await appClientPost(commandUri, null, options);
 }
 
+async function _deletePage(bookUri, pageCode, session) {
+  let command = "deletePage";
+  let commandUri = UriBuilder.parse(bookUri).setUseCase(
+      command).toUri();
+  let options = {session};
+  let dtoIn = {
+    code: pageCode
+  };
+  await appClientPost(commandUri, dtoIn, options);
+}
+
+async function deleteEntries(bookUri, rootPageCodes) {
+  console.info(`Deleting all pages under page with codes "${rootPageCodes}" in book ${bookUri}.`);
+  let session = await _getUserSessions();
+  let menu = await _loadMenu(bookUri, session);
+  for(const rootPageCode of rootPageCodes) {
+    let selectedPages = _loadPagesUnderRoot(menu, rootPageCode);
+    console.info(`Selected pages: ${selectedPages}`);
+    for(const page of selectedPages) {
+      if (page.state === "closed") {
+        console.info(`Deleting ${page.code}...`);
+        await _deletePage(bookUri, page.code, session);
+      } else {
+        console.error(`Page ${page.code} won't be deleted because it is not in closed state.`);
+      }
+    }
+  }
+  console.info(`Deleting of pages finished. Check the log outputs to see if there were any errors / warnings.`);
+}
+
+
 async function _getUserSessions() {
-  const token = await OidcToken.login();
-  return await AuthenticationService.authenticate(token);
+  return await AuthenticationService.authenticate();
 }
 
 async function _loadMenu(bookUri, session) {
@@ -82,6 +119,10 @@ async function _loadMenu(bookUri, session) {
 
 function _loadPagesUnderRoot(bookMenu, rootPage) {
   let currentPage = bookMenu[rootPage];
+  if (!currentPage) {
+    console.warn(`Page with code ${rootPage} does not exist. Skipping...`);
+    return [];
+  }
   let rootIndent = currentPage.indent;
   // filter by page.state (!= newState)
   console.info(`Current page: ${currentPage}`);
@@ -130,6 +171,8 @@ class BookPage {
   }
 }
 
-module.exports = setPageState;
+module.exports = {
+  setPageState, deleteEntries
+};
 
 

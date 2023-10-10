@@ -7,7 +7,7 @@
     "node": ">=8.9.0"
   },
   "dependencies": {
-    "uu_appg01_server": "^4.0.0",
+    "uu_appg01_server": "^4.3.0",
     "command-line-args": "^5.0.2",
     "command-line-usage": "^5.0.5"
   },
@@ -18,7 +18,8 @@
   "scripts": {
     "clean": "uu-appg01-core-npm clean",
     "test": "uu-appg01-core-npm test",
-    "setState": "node cli.js"
+    "setState": "node cli.js -a setState",
+    "delete": "node cli.js -a delete"
   },
   "main": "app/bookKitMng.js",
   "files": [
